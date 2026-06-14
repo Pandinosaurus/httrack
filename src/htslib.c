@@ -121,6 +121,7 @@ const char *hts_detect[] = {
   "lowsrc",
   "profile",                    // element META
   "src",
+  "srcset",                     // HTML5 responsive images (<img>, <source>)
   "swurl",
   "url",
   "usemap",
@@ -877,7 +878,7 @@ int http_sendhead(httrackp * opt, t_cookie * cookie, int mode,
                   const char *xsend, const char *adr, const char *fil,
                   const char *referer_adr, const char *referer_fil,
                   htsblk * retour) {
-  char BIGSTK buffer_head_request[8192];
+  char BIGSTK buffer_head_request[16384];
   buff_struct bstr = { buffer_head_request, sizeof(buffer_head_request), 0 };
 
   //int use_11=0;     // HTTP 1.1 utilisé
@@ -895,9 +896,9 @@ int http_sendhead(httrackp * opt, t_cookie * cookie, int mode,
 
   // possibilité non documentée: >post: et >postfile:
   // si présence d'un tag >post: alors executer un POST
-  // exemple: http://www.someweb.com/test.cgi?foo>post:posteddata=10&foo=5
+  // exemple: http://www.example.com/test.cgi?foo>post:posteddata=10&foo=5
   // si présence d'un tag >postfile: alors envoyer en tête brut contenu dans le fichier en question
-  // exemple: http://www.someweb.com/test.cgi?foo>postfile:post0.txt
+  // exemple: http://www.example.com/test.cgi?foo>postfile:post0.txt
   search_tag = strstr(fil, POSTTOK ":");
   if (!search_tag) {
     search_tag = strstr(fil, POSTTOK "file:");

@@ -409,7 +409,7 @@ void help_catchurl(const char *dest_path) {
   if (soc != INVALID_SOCKET) {
     char BIGSTK url[HTS_URLMAXSIZE * 2];
     char method[32];
-    char BIGSTK data[32768];
+    char BIGSTK data[CATCH_URL_DATA_SIZE];
 
     url[0] = method[0] = data[0] = '\0';
     //
@@ -604,7 +604,7 @@ void help(const char *app, int more) {
   infomsg(" %E  from email address sent in HTTP headers");
   infomsg
     (" %F  footer string in Html code (-%F \"Mirrored [from host %s [file %s [at %s]]]\"");
-  infomsg(" %l  preffered language (-%l \"fr, en, jp, *\"");
+  infomsg(" %l  preferred language (-%l \"fr, en, jp, *\"");
   infomsg(" %a  accepted formats (-%a \"text/html,image/png;q=0.9,*/*;q=0.1\"");
   infomsg(" %X  additional HTTP header line (-%X \"X-Magic: 42\"");
   infomsg("");
@@ -712,7 +712,7 @@ void help(const char *app, int more) {
   infomsg("  '%N' Name of file, including file type (ex: image.gif)");
   infomsg("  '%t' File type (ex: gif)");
   infomsg("  '%p' Path [without ending /] (ex: /someimages)");
-  infomsg("  '%h' Host name (ex: www.someweb.com)");
+  infomsg("  '%h' Host name (ex: www.example.com)");
   infomsg("  '%M' URL MD5 (128 bits, 32 ascii bytes)");
   infomsg("  '%Q' query string MD5 (128 bits, 32 ascii bytes)");
   infomsg("  '%k' full query string");
@@ -767,21 +767,21 @@ void help(const char *app, int more) {
   infomsg("Details: Option %W: External callbacks prototypes");
   infomsg("see htsdefines.h");
   infomsg("");
-  infomsg("example: httrack www.someweb.com/bob/");
-  infomsg("means:   mirror site www.someweb.com/bob/ and only this site");
+  infomsg("example: httrack www.example.com/bob/");
+  infomsg("means:   mirror site www.example.com/bob/ and only this site");
   infomsg("");
   infomsg
-    ("example: httrack www.someweb.com/bob/ www.anothertest.com/mike/ +*.com/*.jpg -mime:application/*");
+    ("example: httrack www.example.com/bob/ www.anothertest.com/mike/ +*.com/*.jpg -mime:application/*");
   infomsg
     ("means:   mirror the two sites together (with shared links) and accept any .jpg files on .com sites");
   infomsg("");
-  infomsg("example: httrack www.someweb.com/bob/bobby.html +* -r6");
+  infomsg("example: httrack www.example.com/bob/bobby.html +* -r6");
   infomsg
     ("means get all files starting from bobby.html, with 6 link-depth, and possibility of going everywhere on the web");
   infomsg("");
   infomsg
-    ("example: httrack www.someweb.com/bob/bobby.html --spider -P proxy.myhost.com:8080");
-  infomsg("runs the spider on www.someweb.com/bob/bobby.html using a proxy");
+    ("example: httrack www.example.com/bob/bobby.html --spider -P proxy.myhost.com:8080");
+  infomsg("runs the spider on www.example.com/bob/bobby.html using a proxy");
   infomsg("");
   infomsg("example: httrack --update");
   infomsg("updates a mirror in the current folder");

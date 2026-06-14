@@ -1,5 +1,8 @@
 # HTTrack Website Copier - Development Repository
 
+[![CI](https://github.com/xroche/httrack/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/xroche/httrack/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/xroche/httrack)](COPYING)
+
 ## About
 _Copy websites to your computer (Offline browser)_
 
@@ -20,7 +23,7 @@ http://www.httrack.com/
 
 ## Compile trunk release
 ```sh
-git clone https://github.com/xroche/httrack.git --recurse
+git clone https://github.com/xroche/httrack.git --recurse-submodules
 cd httrack
 ./configure --prefix=$HOME/usr && make -j8 && make install
 ```

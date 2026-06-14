@@ -274,6 +274,28 @@ Please visit our Website: http://www.httrack.com
   } \
 } while(0)
 
+/* Percent-encode the angle brackets of a string so it is safe to embed inside
+   an HTML comment (the default footer) or any other HTML context. A URL holding
+   "-->" would otherwise close the footer comment and inject markup (issue #165).
+   Raw '<' and '>' are not valid URL characters, so encoding them is harmless. */
+static const char *html_inline_safe(const char *src, char *dst, size_t size) {
+  size_t i, j;
+
+  for(i = 0, j = 0; src[i] != '\0' && j + 4 < size; i++) {
+    const char c = src[i];
+
+    if (c == '<' || c == '>') {
+      dst[j++] = '%';
+      dst[j++] = '3';
+      dst[j++] = (c == '<') ? 'C' : 'E';
+    } else {
+      dst[j++] = c;
+    }
+  }
+  dst[j] = '\0';
+  return dst;
+}
+
 /* Main parser */
 int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
   char catbuff[CATBUFF_SIZE];
@@ -510,6 +532,7 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
         int valid_p = 0;        // force to take p even if == 0
         int ending_p = '\0';    // ending quote?
         int archivetag_p = 0;   // avoid multiple-archives with commas
+        int srcset_p = 0;       // srcset="url1 480w, url2 2x": list of URLs
         int unquoted_script = 0;
         INSCRIPT inscript_state_pos_prev = inscript_state_pos;
 
@@ -719,13 +742,16 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
                 if (StringNotEmpty(opt->footer)) {
                   char BIGSTK tempo[1024 + HTS_URLMAXSIZE * 2];
                   char gmttime[256];
+                  char BIGSTK safe_adr[HTS_URLMAXSIZE * 3 + 4];
+                  char BIGSTK safe_fil[HTS_URLMAXSIZE * 3 + 4];
 
                   tempo[0] = '\0';
                   time_gmt_rfc822(gmttime);
                   strcatbuff(tempo, eol);
                   hts_template_format_str(tempo + strlen(tempo), sizeof(tempo) - strlen(tempo),
                           StringBuff(opt->footer),
-                          jump_identification_const(urladr()), urlfil(), gmttime,
+                          html_inline_safe(jump_identification_const(urladr()), safe_adr, sizeof(safe_adr)),
+                          html_inline_safe(urlfil(), safe_fil, sizeof(safe_fil)), gmttime,
                           HTTRACK_VERSIONID, /* EOF */ NULL);
                   strcatbuff(tempo, eol);
                   //fwrite(tempo,1,strlen(tempo),fp);
@@ -1024,6 +1050,12 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
                           /* This is a temporary hack to avoid archive=foo.jar,bar.jar .. */
                           if (strcmp(hts_detect[i], "archive") == 0) {
                             archivetag_p = 1;
+                          }
+                          /* srcset: a comma-list of candidate URLs, each split
+                             out and rewritten below (#235, #236) */
+                          else if (strcmp(hts_detect[i], "srcset") == 0
+                                   || strcmp(hts_detect[i], "data-srcset") == 0) {
+                            srcset_p = 1;
                           }
                         }
                         i++;
@@ -1790,6 +1822,14 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
                 html++;          // sauter # pour usemap etc
               }
             }
+ srcset_next:
+            /* srcset: skip leading whitespace/commas before each candidate;
+               the skipped bytes flush verbatim below */
+            if (srcset_p) {
+              while(html < r->adr + r->size
+                    && (is_realspace(*html) || *html == ','))
+                INCREMENT_CURRENT_ADR(1);
+            }
             eadr = html;
 
             // ne pas flusher après code si on doit écrire le codebase avant!
@@ -1819,6 +1859,7 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
                     if ((*eadr == quote && (!quoteinscript || *(eadr - 1) == '\\'))     // end quote
                         || (noquote && (*eadr == '\"' || *eadr == '\''))        // end at any quote
                         || (!noquote && quote == '\0' && is_realspace(*eadr))   // unquoted href
+                        || srcset_p     // whitespace ends a srcset candidate URL
                       )         // si pas d'attente de quote spéciale ou si quote atteinte
                       ok = 0;
                   } else if (ending_p && (*eadr == ending_p))
@@ -1847,6 +1888,16 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
                       break;    // \" ou \' point d'arrêt
                     case '?':  /*quote_adr=adr; */
                       break;    // noter position query
+                    case ',':
+                      if (srcset_p) {
+                        /* split only on a trailing comma; one inside the URL
+                           (data: URI, CDN path) is kept, per the WHATWG algo */
+                        const char *const n = eadr + 1;
+
+                        if (n >= r->adr + r->size || is_space(*n) || *n == ',')
+                          ok = 0;
+                      }
+                      break;
                     }
                   }
                   //}
@@ -3225,6 +3276,28 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
             }
             // adr=eadr-1;  // ** sauter
 
+            /* srcset candidate loop: skip the descriptor and comma, then
+               re-enter the capture for the next URL. Backward goto, not a loop:
+               the per-candidate body is this whole block. */
+            if (srcset_p && ok == 0) {
+              const char *const endp = r->adr + r->size;
+              const char *q = html;
+              while(q < endp && *q != '\0' && *q != ',' && *q != quote
+                    && *q != '<' && *q != '>' && (unsigned char) *q >= 32)
+                q++;            // skip the descriptor
+              if (q < endp && *q == ',') {
+                q++;
+                while(q < endp && (is_realspace(*q) || *q == ','))
+                  q++;          // skip whitespace and empty candidates
+                if (q < endp && *q != '\0' && *q != ',' && *q != quote
+                    && *q != '<' && *q != '>' && (unsigned char) *q >= 32) {
+                  INCREMENT_CURRENT_ADR(q - html);   // keep the automate in sync
+                  ok = 1;
+                  goto srcset_next;
+                }
+              }
+            }
+
             /* We skipped bytes and skip the " : reset state */
             /*if (inscript) {
                inscript_state_pos = INSCRIPT_START;
@@ -3341,12 +3414,10 @@ int htsparse(htsmoduleStruct * str, htsmoduleStructExtended * stre) {
           hts_log_print(opt, LOG_DEBUG, "engine: postprocess-html: %s%s",
                         urladr(), urlfil());
           if (RUN_CALLBACK4(opt, postprocess, &cAddr, &cSize, urladr(), urlfil()) == 1) {
-            if (cAddr != TypedArrayElts(output_buffer)) {
-              hts_log_print(opt, LOG_DEBUG, 
-                "engine: postprocess-html: callback modified data, applying %d bytes", cSize);
-              TypedArraySize(output_buffer) = 0;
-              TypedArrayAppend(output_buffer, cAddr, cSize);
-            }
+            hts_log_print(opt, LOG_DEBUG,
+              "engine: postprocess-html: callback modified data, applying %d bytes", cSize);
+            TypedArraySize(output_buffer) = 0;
+            TypedArrayAppend(output_buffer, cAddr, cSize);
           }
         }
 
